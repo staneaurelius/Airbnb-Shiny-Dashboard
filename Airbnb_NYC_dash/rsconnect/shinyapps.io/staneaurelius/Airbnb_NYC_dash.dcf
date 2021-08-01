@@ -1,0 +1,13 @@
+name: Airbnb_NYC_dash
+title: Airbnb_NYC_dash
+username:
+account: staneaurelius
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 4445434
+bundleId: 4877466
+url: https://staneaurelius.shinyapps.io/Airbnb_NYC_dash/
+when: 1627837772.30275
+lastSyncTime: 1627837772.30275
+asMultiple: FALSE
+asStatic: FALSE

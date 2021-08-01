@@ -1,0 +1,275 @@
+---
+title: "Interactive Plotting Guide"
+author: "Stane Aurelius Ronotana"
+date: "1 August, 2021"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 3
+    toc_float:
+      collapsed: no
+    number_sections: no
+    theme: lumen
+    highlight: zenburn
+    css: assets/styles.css
+  pdf_document:
+    toc: no
+---
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE)
+```
+
+# Background {.tabset}
+
+## Brief
+
+This notebook is provided as a guide before creating interactive plotting in Shiny Web App. In this notebook, I will use the **New York City Airbnb Open Data** obtained from [Kaggle](https://www.kaggle.com/dgomonov/new-york-city-airbnb-open-data). This dataset describes the listing activity and metrics in New York City in 2019. The goal is to create an interactive Shiny dashboard. All the necessary operations such as data cleaning and initial visualization will first be performed in this notebook.
+
+## Libraries and Setup
+
+These following packages are required in this notebook. Use `install.packages()` to install any packages that are not already downloaded and load them using `library()` function. I provided a brief explanation about their function.
+
+* **tidyverse**: data transformation
+* **plotly**: interactive plotting
+* **glue**: providing customized information in interactive plotting
+* **scale**: customizing axis in interactive plotting
+* **lubridate**: handling datetime data
+* **leaflet**: creating interactive map
+
+Packages for Shiny App:
+
+* **shiny**: creating Shiny App
+* **shinydashboard**: creating Shiny Dashboard
+* **shinyWidgets**: allow using Shiny Dashboard function in Shiny App
+* **shinythemes**: applying Shiny themes
+
+```{r}
+library(tidyverse)
+library(glue)
+library(scales)
+library(plotly)
+library(lubridate)
+library(leaflet)
+```
+
+# Data Preparation
+
+## Data Inspection
+
+```{r}
+ab_nyc <- read.csv("data_input/AB_NYC_2019.csv")
+head(ab_nyc)
+```
+
+```{r}
+str(ab_nyc)
+```
+
+Some information about the features:
+
+* **id**: listing ID
+* **name**: name of the listing
+* **host_id**: host ID
+* **host_name**: name of the host
+* **neighbourhood_group**: location
+* **neighbourhood**: area
+* **latitude**: latitude coordinates
+* **longitude**: longitude coordinates
+* **room_type**: listing space type
+* **price**: price in dollars
+* **minimum_nights**: amount of minimum nights
+* **number_of_reviews**: number of reviews
+* **last_review**: latest review
+* **reviews_per_month**: number of reviews per month
+* **calculated_host_listings_count**: amount of listings per host
+* **availability_365**: number of days when listing is available for booking
+
+## Data Cleaning
+
+By inspecting the data, we know that some of the features' types are incorrect and there are some missing values in the data. Furthermore, we know that we do not need the IDs in data visualization. So, I am going to drop **id** and **host_id** beforehand.
+
+```{r}
+ab_nyc <- ab_nyc %>% 
+  select(-c(id, host_id))
+```
+
+The term *neighbourhood_group* seems confusing. So, I will change it to *borough* instead.
+
+```{r}
+ab_nyc <- ab_nyc %>% 
+  rename(borough = neighbourhood_group)
+```
+
+Notice that in **room_type**, there is a value called *Entire home/apt*. Later on, when we are providing text for the interactive plot, this value will be displayed. I will change it first into a more preferable format.
+
+```{r}
+unique(ab_nyc$room_type)
+```
+
+```{r}
+ab_nyc <- ab_nyc %>% 
+  mutate(room_type = recode(room_type, 
+                            "Entire home/apt" = "Entire Home/Apartment",
+                            "Private room" = "Private Room",
+                            "Shared room" = "Shared Room"))
+```
+
+
+### Feature Type
+
+We need to convert these following features' types:
+* **borough**: Categorical
+* **neighbourhood**: Categorical
+* **room_type**: categorical
+* **last_review**: Date
+
+```{r}
+ab_nyc <- ab_nyc %>% 
+  mutate(across(c(borough, neighbourhood, room_type),
+                factor),
+         last_review = ymd(last_review))
+
+head(ab_nyc)
+```
+
+
+### Missing Values
+
+```{r}
+colSums(is.na(ab_nyc))
+```
+
+There are 10052 missing values both in **last_review** and **reviews_per_month**. Considering the information, it seems like we are unable to impute the missing values. Besides, giving it further thought, I do not think that those features are very important in interactive plotting. So, I am going to just drop those features.
+
+```{r}
+ab_nyc <- ab_nyc %>% 
+  select(-c(last_review, reviews_per_month))
+```
+
+
+### Duplicated Data
+
+```{r}
+sum(duplicated(ab_nyc))
+```
+
+There is not any duplicated data in the dataset. So we can proceed to the visualization part. Before that, I combined the codes for cleaning the data as follows:
+
+```{r}
+#ab_nyc <- read.csv("data_input/AB_NYC_2019.csv")
+#ab_nyc <- ab_nyc %>% 
+#  select(-c(id, host_id, last_review, reviews_per_month)) %>% 
+#  rename(borough = neighbourhood_group) %>% 
+#  
+#  mutate(across(c(borough, neighbourhood, room_type),
+#                factor)) %>% 
+#  
+#  mutate(room_type = recode(room_type, 
+#                            "Entire home/apt" = "Entire Home/Apartment",
+#                            "Private room" = "Private Room",
+#                            "Shared room" = "Shared Room"))
+```
+
+
+
+# Data Visualization
+
+Below are the features I want to add in Shiny dashboard:
+
+* Bar plot that shows the top-n listings based on some filters, e.g. room type or price
+* Data table
+* Map showing all available listings in New York City
+
+
+## Bar Plot
+
+When we are going to show the top-n listings, we need a metric that allows us to be able to rank them. However, in the dataset, there are no things such as review score. The only metric we can use is only **number_of_reviews**, which I personally think may be appropriate to use since more reviews simply means the place is more popular. It does not guarantee that the place is the best option though (some reviews might be bad), but since there are no review score, let's just proceed with the number of reviews for now.
+
+Although I am going to create an interactive bar plot that can change based on users' input, I will only create a single plot here (as the base). Then, when creating the Shiny dashboard, I will change some of the mappings in the plot so that it can receive users' input. For now, I will create a bar plot that shows top 5 private room listing under $250 in Brooklyn and Manhattan.
+
+```{r}
+bar_df <- ab_nyc %>%
+  filter(borough %in% c("Brooklyn", "Manhattan"),
+         room_type == "Private Room",
+         price <= 250) %>% 
+  slice_max(number_of_reviews, n = 5)
+
+bar_df
+```
+
+```{r}
+bar_plot <- bar_df %>% 
+  ggplot(mapping = aes(x = reorder(name, number_of_reviews),
+                       y = number_of_reviews,
+                       text = glue("{name}
+                                 Location: {neighbourhood}, {borough}
+                                 Price: ${price}
+                                 Reviews Count: {number_of_reviews}"))) +
+  geom_col(fill = "#2c3e50") +
+  geom_text(aes(label = number_of_reviews,
+              y = number_of_reviews + 12),
+          size = 3,
+          col = "black") +
+  labs(title = glue("Top 5 Private Room Listing under $250 in Brooklyn and Manhattan"),
+       x = NULL,
+       y = "Number of Reviews") +
+  scale_x_discrete(labels = wrap_format(20)) +
+  coord_flip() +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+ggplotly(bar_plot, tooltip = "text") %>% 
+  layout(hoverlabel = list(bgcolor = "b5e2ff"))
+```
+
+## Bubble Map
+
+Creating the icons and popup content.
+
+```{r}
+bnb_icon <- makeIcon(
+  iconUrl = "assets/home.png",
+  iconWidth = 30, 
+  iconHeight = 30
+)
+
+popup <- paste(sep = "",
+               ab_nyc$name, "<br>",
+               "Room Type: ", ab_nyc$room_type, "<br>",
+               "Price: $", ab_nyc$price,"<br>",
+               "Number of Reviews: ", ab_nyc$number_of_reviews
+               )
+```
+
+Creating the map, limiting the zoom out options so the map can be more focused on New York City.
+
+```{r}
+bubble_map <- leaflet(options = leafletOptions(zoomControl = FALSE,
+                                               minZoom = 10)) %>% 
+  setView(lng = -73.935242, lat = 40.730610, zoom = 10) %>%
+  
+  addTiles() %>% 
+  
+  addMarkers(lat = ab_nyc$latitude,
+             lng = ab_nyc$longitude,
+             icon = bnb_icon,
+             popup = popup,
+             clusterOptions = markerClusterOptions()
+             ) %>%
+  
+  addProviderTiles(providers$CartoDB.PositronNoLabels) %>%
+  
+  addProviderTiles(providers$Stamen.TonerLines,
+                   options = providerTileOptions(opacity = 0.5)) %>%
+  
+  addProviderTiles(providers$Stamen.TonerLabels) %>% 
+  addProviderTiles(providers$OpenSeaMap)
+
+bubble_map
+```
