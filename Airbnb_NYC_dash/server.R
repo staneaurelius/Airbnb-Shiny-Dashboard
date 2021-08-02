@@ -41,7 +41,7 @@ function(input, output) {
                           y = number_of_reviews + 12),
                       size = 3,
                       col = "black") +
-            labs(title = glue("Top {input$top_n} {input$room_type} Listing under {dollar(input$price)}"),
+            labs(title = glue("Top {input$top_n} {input$room_type} Listing under {dollar(input$price)} in {paste(input$borough, collapse = ', ')}"),
                  x = NULL,
                  y = "Number of Reviews") +
             scale_x_discrete(labels = wrap_format(20)) +
