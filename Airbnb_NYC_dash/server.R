@@ -34,14 +34,14 @@ function(input, output) {
                                  y = number_of_reviews,
                                  text = glue("{name}
                                  Location: {neighbourhood}, {borough}
-                                 Price: ${price}
+                                 Price: {dollar(price)}
                                  Reviews Count: {number_of_reviews}"))) +
             geom_col(fill = "#2c3e50") +
             geom_text(aes(label = number_of_reviews,
                           y = number_of_reviews + 12),
                       size = 3,
                       col = "black") +
-            labs(title = glue("Top {input$top_n} {input$room_type} Listing under ${input$price}"),
+            labs(title = glue("Top {input$top_n} {input$room_type} Listing under {dollar(input$price)}"),
                  x = NULL,
                  y = "Number of Reviews") +
             scale_x_discrete(labels = wrap_format(20)) +
@@ -96,7 +96,7 @@ function(input, output) {
         popup <- paste(sep = "",
                        ab_nyc$name, "<br>",
                        "Room Type: ", ab_nyc$room_type, "<br>",
-                       "Price: $", ab_nyc$price,"<br>",
+                       "Price: ", dollar(ab_nyc$price),"<br>",
                        "Number of Reviews: ", ab_nyc$number_of_reviews
         )
         
